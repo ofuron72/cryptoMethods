@@ -10,6 +10,7 @@ import java.util.List;
  */
 public class DESUtils {
     // Таблицы перестановок и S-боксы (полные)
+    // Таблица начальной перестановки ключа (PC1)
     private static final int[] PC1 = {
             57, 49, 41, 33, 25, 17, 9,
             1, 58, 50, 42, 34, 26, 18,
@@ -22,6 +23,7 @@ public class DESUtils {
             21, 13, 5, 28, 20, 12, 4
     };
 
+    // Таблица сжатия ключа (PC2)
     private static final int[] PC2 = {
             14, 17, 11, 24, 1, 5,
             3, 28, 15, 6, 21, 10,
@@ -34,6 +36,7 @@ public class DESUtils {
             46, 42, 50, 36, 29, 32
     };
 
+    // Таблица расширения (E-box): 32-битный блок → 48-битный
     private static final int[] E_BOX = {
             32, 1, 2, 3, 4, 5,
             4, 5, 6, 7, 8, 9,
@@ -45,6 +48,7 @@ public class DESUtils {
             28, 29, 30, 31, 32, 1
     };
 
+    // Таблица перестановки P (P-box)
     private static final int[] P_BOX = {
             16, 7, 20, 21,
             29, 12, 28, 17,
@@ -56,6 +60,7 @@ public class DESUtils {
             22, 11, 4, 25
     };
 
+    // Таблица начальной перестановки IP
     private static final int[] IP = {
             58, 50, 42, 34, 26, 18, 10, 2,
             60, 52, 44, 36, 28, 20, 12, 4,
@@ -67,6 +72,7 @@ public class DESUtils {
             63, 55, 47, 39, 31, 23, 15, 7
     };
 
+    // Таблица финальной перестановки FP (инверсная IP)
     private static final int[] FP = {
             40, 8, 48, 16, 56, 24, 64, 32,
             39, 7, 47, 15, 55, 23, 63, 31,
@@ -78,11 +84,13 @@ public class DESUtils {
             33, 1, 41, 9, 49, 17, 57, 25
     };
 
+    // Сдвиги для каждого из 16 раундов
     private static final int[] ROTATIONS = {
             1, 1, 2, 2, 2, 2, 2, 2,
             1, 2, 2, 2, 2, 2, 2, 1
     };
 
+    // 8 S-боксов: 6-битный ввод → 4-битный вывод
     private static final int[][][] S_BOXES = {
             {
                     {14,4,13,1,2,15,11,8,3,10,6,12,5,9,0,7},
@@ -135,6 +143,9 @@ public class DESUtils {
     };
 
 
+    /**
+     * Дополняет данные по стандарту PKCS5 до нужного размера блока.
+     */
     public static byte[] pkcs5Pad(byte[] data, int blockSize) {
         int paddingLen = blockSize - (data.length % blockSize);
         byte[] padded = Arrays.copyOf(data, data.length + paddingLen);
@@ -142,11 +153,17 @@ public class DESUtils {
         return padded;
     }
 
+    /**
+     * Удаляет дополнение PKCS5 после расшифровки.
+     */
     public static byte[] pkcs5Unpad(byte[] data) {
         int pad = data[data.length - 1] & 0xFF;
         return Arrays.copyOf(data, data.length - pad);
     }
 
+    /**
+     * Преобразует байты в список битов.
+     */
     public static List<Integer> bytesToBits(byte[] bytes) {
         List<Integer> bits = new ArrayList<>();
         for (byte b : bytes)
@@ -155,6 +172,9 @@ public class DESUtils {
         return bits;
     }
 
+    /**
+     * Преобразует список битов обратно в байты.
+     */
     public static byte[] bitsToBytes(List<Integer> bits) {
         byte[] bytes = new byte[bits.size() / 8];
         for (int i = 0; i < bits.size(); i++) {
@@ -165,6 +185,9 @@ public class DESUtils {
         return bytes;
     }
 
+    /**
+     * Применяет таблицу перестановки к битам.
+     */
     public static List<Integer> permute(List<Integer> bits, int[] table) {
         List<Integer> output = new ArrayList<>();
         for (int value : table) {
@@ -173,12 +196,18 @@ public class DESUtils {
         return output;
     }
 
+    /**
+     * Выполняет циклический сдвиг влево на n позиций.
+     */
     public static List<Integer> leftRotate(List<Integer> bits, int n) {
         List<Integer> rotated = new ArrayList<>(bits);
         Collections.rotate(rotated, -n);
         return rotated;
     }
 
+    /**
+     * Генерирует 16 раундовых ключей из исходного ключа.
+     */
     public static List<List<Integer>> generateRoundKeys(byte[] key) {
         List<Integer> keyBits = bytesToBits(key);
         List<Integer> permKey = permute(keyBits, PC1);
@@ -196,12 +225,18 @@ public class DESUtils {
         return roundKeys;
     }
 
+    /**
+     * Функция Фейстеля, используется в каждом раунде.
+     */
     public static List<Integer> feistel(List<Integer> R, List<Integer> roundKey) {
+        // Расширение правой половины с 32 до 48 бит
         List<Integer> expanded = permute(R, E_BOX);
+        // XOR с ключом раунда
         for (int i = 0; i < expanded.size(); i++) {
             expanded.set(i, expanded.get(i) ^ roundKey.get(i));
         }
 
+        // S-боксы: 48 → 32 бит
         List<Integer> output = new ArrayList<>();
         for (int i = 0; i < 8; i++) {
             List<Integer> block = expanded.subList(i * 6, i * 6 + 6);
@@ -213,9 +248,13 @@ public class DESUtils {
             }
         }
 
+        // Перестановка P
         return permute(output, P_BOX);
     }
 
+    /**
+     * Шифрует 64-битный блок (один блок DES).
+     */
     public static List<Integer> desBlockEncrypt(List<Integer> bits, List<List<Integer>> roundKeys) {
         List<Integer> block = permute(bits, IP);
         List<Integer> L = new ArrayList<>(block.subList(0, 32));
@@ -236,6 +275,9 @@ public class DESUtils {
         return permute(combined, FP);
     }
 
+    /**
+     * Расшифровывает 64-битный блок.
+     */
     public static List<Integer> desBlockDecrypt(List<Integer> bits, List<List<Integer>> roundKeys) {
         List<Integer> block = permute(bits, IP);
         List<Integer> L = new ArrayList<>(block.subList(0, 32));
@@ -256,6 +298,9 @@ public class DESUtils {
         return permute(combined, FP);
     }
 
+    /**
+     * Шифрует данные DES с заданным ключом.
+     */
     public static byte[] desEncrypt(byte[] key, byte[] plaintext) {
         List<List<Integer>> roundKeys = generateRoundKeys(key);
         byte[] padded = pkcs5Pad(plaintext, 8);
@@ -272,6 +317,9 @@ public class DESUtils {
         return result;
     }
 
+    /**
+     * Расшифровывает данные DES с заданным ключом.
+     */
     public static byte[] desDecrypt(byte[] key, byte[] ciphertext) {
         List<List<Integer>> roundKeys = generateRoundKeys(key);
         byte[] result = new byte[ciphertext.length];
